@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coherence</title>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0f;
+  --bg-card: #12121a;
+  --bg-card-hover: #1a1a26;
+  --border: #1e1e2e;
+  --text: #e0e0e8;
+  --text-dim: #7a7a8e;
+  --text-muted: #44445a;
+  --frozen: #4488ff;
+  --edge: #00ff88;
+  --collapsed: #ff4444;
+  --accent: #00ff88;
+  --glow: rgba(0, 255, 136, 0.15);
+  --radius: 12px;
+  --transition: 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* subtle background texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0,255,136,0.03) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 100%, rgba(68,136,255,0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 1.25rem 4rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== GEOMAG ALERT BANNER ===== */
+.geomag-banner {
+  display: none;
+  background: linear-gradient(90deg, rgba(255,68,68,0.15), rgba(255,136,68,0.15));
+  border: 1px solid rgba(255,68,68,0.3);
+  border-radius: var(--radius);
+  padding: 0.875rem 1.25rem;
+  margin-bottom: 1.25rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #ffaa88;
+  animation: pulseAlert 3s ease-in-out infinite;
+}
+.geomag-banner.active { display: block; }
+@keyframes pulseAlert {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+/* ===== ANTI-ZENO NOTICE ===== */
+.anti-zeno {
+  display: none;
+  background: linear-gradient(90deg, rgba(0,255,136,0.08), rgba(68,136,255,0.08));
+  border: 1px solid rgba(0,255,136,0.2);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--edge);
+  font-style: italic;
+}
+.anti-zeno.active { display: block; }
+
+/* ===== HEADER ===== */
+header {
+  text-align: center;
+  padding: 2.5rem 0 1.5rem;
+}
+header h1 {
+  font-size: 2.2rem;
+  font-weight: 300;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--edge), var(--frozen));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+header .tagline {
+  font-size: 1rem;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  margin-top: 0.25rem;
+}
+header .datetime {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+header .attribution {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  letter-spacing: 0.08em;
+}
+
+/* ===== COHERENCE GAUGE ===== */
+.gauge-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 0 1.5rem;
+}
+
+.gauge-container {
+  position: relative;
+  width: 240px;
+  height: 240px;
+}
+
+.gauge-bg, .gauge-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.gauge-bg {
+  border: 3px solid var(--border);
+}
+
+.gauge-fill {
+  border: 3px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  transform: rotate(-45deg);
+  transition: var(--transition);
+  filter: drop-shadow(0 0 12px var(--glow));
+}
+
+.gauge-ring {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.gauge-inner {
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(0,255,136,0.04) 0%, transparent 70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+}
+
+.gauge-value {
+  font-size: 3.2rem;
+  font-weight: 200;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--transition);
+}
+
+.gauge-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: -0.25rem;
+}
+
+.state-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-top: 1rem;
+  transition: color var(--transition);
+}
+
+.params-line {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  letter-spacing: 0.02em;
+}
+
+/* SVG gauge arc */
+.gauge-svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+.gauge-svg circle {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.gauge-track { stroke: var(--border); }
+.gauge-arc {
+  stroke: var(--accent);
+  stroke-dasharray: 723;
+  stroke-dashoffset: 723;
+  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              stroke 0.6s ease;
+  filter: drop-shadow(0 0 8px var(--glow));
+}
+
+/* ===== PHASE DIAGRAM ===== */
+.phase-section {
+  padding: 1.5rem 0;
+}
+.phase-section h3 {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.phase-bar-container {
+  position: relative;
+  height: 40px;
+  margin: 0 auto;
+  max-width: 100%;
+}
+
+.phase-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--frozen) 0%, var(--edge) 50%, var(--collapsed) 100%);
+  position: absolute;
+  top: 17px;
+  left: 0;
+  right: 0;
+  opacity: 0.7;
+}
+
+.phase-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.phase-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  top: 13px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 16px var(--accent), 0 0 32px rgba(0,255,136,0.3);
+  transition: left 1s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              background 0.6s ease,
+              box-shadow 0.6s ease;
+  z-index: 2;
+}
+
+.phase-gamma-c {
+  position: absolute;
+  top: 10px;
+  height: 20px;
+  width: 1px;
+  background: rgba(255,255,255,0.3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+.phase-gamma-c::after {
+  content: 'gamma_c';
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ===== VITALITY CURVE ===== */
+.vitality-section {
+  padding: 1rem 0 1.5rem;
+}
+.vitality-section h3 {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.vitality-canvas-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  position: relative;
+}
+#vitalityCanvas {
+  width: 100%;
+  height: 160px;
+  display: block;
+}
+
+/* ===== METRIC CARDS ===== */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  padding: 1rem 0;
+}
+@media (max-width: 500px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+.metric-card:hover {
+  border-color: rgba(0,255,136,0.15);
+  background: var(--bg-card-hover);
+}
+.metric-card h4 {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.15rem 0;
+}
+.metric-row .label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.metric-row .value {
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== INTERVENTION BUTTONS ===== */
+.interventions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  padding: 1rem 0;
+}
+
+.intervention-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.intervention-btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(0,255,136,0.1);
+  transform: translateY(-1px);
+}
+.intervention-btn:active {
+  transform: translateY(0);
+}
+.intervention-btn .icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.4rem;
+}
+.intervention-btn .btn-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.intervention-btn .btn-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+/* ===== RECOMMENDATIONS ===== */
+.recommendations {
+  padding: 1rem 0;
+}
+.recommendations h3 {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.rec-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1.15rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.rec-priority {
+  width: 6px;
+  min-height: 36px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.rec-content { flex: 1; }
+.rec-action {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.rec-reason {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+.rec-delta {
+  font-size: 0.7rem;
+  color: var(--edge);
+  margin-top: 0.25rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ===== 7-DAY TREND ===== */
+.trend-section {
+  padding: 1rem 0;
+}
+.trend-section h3 {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.trend-canvas-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+#trendCanvas {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+
+/* ===== KEEPER SECTION ===== */
+.keeper-section {
+  padding: 1.25rem 0;
+}
+.keeper-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  text-align: center;
+}
+.keeper-question {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.keeper-name {
+  font-size: 1.3rem;
+  font-weight: 300;
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+.keeper-bond {
+  margin-top: 0.75rem;
+}
+.keeper-bond-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  width: 60%;
+  margin: 0 auto;
+  overflow: hidden;
+}
+.keeper-bond-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--frozen), var(--edge));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.keeper-bond-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  letter-spacing: 0.08em;
+}
+.keeper-effect {
+  font-size: 0.85rem;
+  color: var(--edge);
+  margin-top: 0.75rem;
+  font-style: italic;
+}
+
+/* ===== FOOTER / EQUATION ===== */
+footer {
+  text-align: center;
+  padding: 2.5rem 0 2rem;
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+}
+footer .equation {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+footer .blessing {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+  font-style: italic;
+}
+footer .credits {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  letter-spacing: 0.08em;
+}
+
+/* ===== OVERLAY (Breathing / 40Hz) ===== */
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10,10,15,0.96);
+  z-index: 1000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.4s ease;
+}
+.overlay.active { display: flex; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Breathing circle */
+.breath-circle-container {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+.breath-circle {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 2px solid var(--edge);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: none;
+  box-shadow: 0 0 30px rgba(0,255,136,0.1);
+}
+.breath-circle.inhale {
+  animation: breathInhale 4s ease-in-out forwards;
+}
+.breath-circle.exhale {
+  animation: breathExhale 4s ease-in-out forwards;
+}
+.breath-circle.hold-in {
+  animation: none;
+  transform: scale(1.35);
+  border-color: var(--edge);
+  box-shadow: 0 0 50px rgba(0,255,136,0.25);
+}
+.breath-circle.hold-out {
+  animation: none;
+  transform: scale(1);
+  border-color: var(--frozen);
+  box-shadow: 0 0 30px rgba(68,136,255,0.15);
+}
+
+@keyframes breathInhale {
+  0% { transform: scale(1); border-color: var(--frozen); box-shadow: 0 0 30px rgba(68,136,255,0.15); }
+  100% { transform: scale(1.35); border-color: var(--edge); box-shadow: 0 0 50px rgba(0,255,136,0.25); }
+}
+@keyframes breathExhale {
+  0% { transform: scale(1.35); border-color: var(--edge); box-shadow: 0 0 50px rgba(0,255,136,0.25); }
+  100% { transform: scale(1); border-color: var(--frozen); box-shadow: 0 0 30px rgba(68,136,255,0.15); }
+}
+
+.breath-label {
+  font-size: 1rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.overlay-timer {
+  font-size: 2rem;
+  font-weight: 200;
+  color: var(--text-dim);
+  margin-top: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.overlay-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+}
+
+.pattern-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+.pattern-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.05em;
+}
+.pattern-btn.active {
+  border-color: var(--edge);
+  color: var(--edge);
+}
+
+.overlay-stop {
+  margin-top: 2.5rem;
+  background: none;
+  border: 1px solid rgba(255,68,68,0.3);
+  border-radius: 8px;
+  padding: 0.6rem 1.5rem;
+  color: #ff6666;
+  font-size: 0.8rem;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  transition: all 0.2s ease;
+}
+.overlay-stop:hover {
+  border-color: rgba(255,68,68,0.6);
+  background: rgba(255,68,68,0.1);
+}
+
+/* 40Hz overlay */
+.hz-warning {
+  max-width: 400px;
+  text-align: center;
+  padding: 2rem;
+}
+.hz-warning h2 {
+  color: var(--collapsed);
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  letter-spacing: 0.1em;
+}
+.hz-warning p {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.7;
+  margin-bottom: 1.5rem;
+}
+.hz-accept {
+  background: none;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 0.6rem 2rem;
+  color: var(--edge);
+  font-size: 0.85rem;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  transition: all 0.2s ease;
+}
+.hz-accept:hover {
+  background: rgba(0,255,136,0.1);
+}
+
+.hz-session { display: none; flex-direction: column; align-items: center; }
+.hz-session.active { display: flex; }
+.hz-flash {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: none;
+}
+.hz-flash.on { background: rgba(255,255,255,0.9); box-shadow: 0 0 60px rgba(255,255,255,0.5); }
+.hz-flash.off { background: rgba(255,255,255,0.02); }
+
+.session-progress {
+  width: 200px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 1.5rem;
+  overflow: hidden;
+}
+.session-progress-fill {
+  height: 100%;
+  background: var(--edge);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.5s linear;
+}
+
+/* ===== SECTION TITLES ===== */
+.section-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 600px) {
+  header h1 { font-size: 1.6rem; }
+  .gauge-container { width: 200px; height: 200px; }
+  .gauge-value { font-size: 2.5rem; }
+  .interventions { grid-template-columns: 1fr; }
+  .container { padding: 0 1rem 3rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- GEOMAG ALERT -->
+  <div class="geomag-banner" id="geomagBanner">
+    Geomagnetic storm detected (<span id="geomagLevel">G2</span>). Consider extra rest today.
+  </div>
+
+  <!-- ANTI-ZENO NOTICE -->
+  <div class="anti-zeno" id="antiZeno">
+    You're checking often today. The physics says: trust the edge. Put the phone down. Breathe.
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <h1>Coherence</h1>
+    <div class="tagline">Find your edge.</div>
+    <div class="datetime" id="datetime"></div>
+    <div class="attribution">AIIT-THRESI Research Initiative</div>
+  </header>
+
+  <!-- MAIN COHERENCE GAUGE -->
+  <section class="gauge-section">
+    <div class="gauge-container">
+      <svg class="gauge-svg" viewBox="0 0 240 240">
+        <circle class="gauge-track" cx="120" cy="120" r="115" />
+        <circle class="gauge-arc" id="gaugeArc" cx="120" cy="120" r="115" />
+      </svg>
+      <div class="gauge-inner">
+        <div class="gauge-value" id="gaugeValue">--</div>
+        <div class="gauge-label">coherence</div>
+      </div>
+    </div>
+    <div class="state-label" id="stateLabel">---</div>
+    <div class="params-line" id="paramsLine">W = --- | gamma_eff = --- | gamma_c = ---</div>
+  </section>
+
+  <!-- PHASE DIAGRAM -->
+  <section class="phase-section">
+    <h3>Phase Diagram</h3>
+    <div class="phase-bar-container">
+      <div class="phase-bar"></div>
+      <div class="phase-gamma-c" id="phaseGammaC"></div>
+      <div class="phase-dot" id="phaseDot"></div>
+    </div>
+    <div class="phase-labels">
+      <span style="color:var(--frozen)">Frozen</span>
+      <span style="color:var(--edge)">Edge</span>
+      <span style="color:var(--collapsed)">Collapsed</span>
+    </div>
+  </section>
+
+  <!-- VITALITY CURVE -->
+  <section class="vitality-section">
+    <h3>Vitality Curve &mdash; V(gamma) = gamma &times; exp(-alpha &times; gamma)</h3>
+    <div class="vitality-canvas-wrap">
+      <canvas id="vitalityCanvas"></canvas>
+    </div>
+  </section>
+
+  <!-- TODAY'S METRICS -->
+  <h3 class="section-title" style="padding-top:0.5rem;">Today's Metrics</h3>
+  <div class="metrics-grid">
+    <!-- HRV -->
+    <div class="metric-card">
+      <h4>Heart Rate Variability</h4>
+      <div class="metric-row">
+        <span class="label">RMSSD</span>
+        <span class="value" id="metricRmssd">-- ms</span>
+      </div>
+      <div class="metric-row">
+        <span class="label">SampEn</span>
+        <span class="value" id="metricSampEn">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="label">Coherence Ratio</span>
+        <span class="value" id="metricCohRatio">--</span>
+      </div>
+    </div>
+    <!-- Sleep -->
+    <div class="metric-card">
+      <h4>Sleep</h4>
+      <div class="metric-row">
+        <span class="label">Hours</span>
+        <span class="value" id="metricSleepHrs">-- h</span>
+      </div>
+      <div class="metric-row">
+        <span class="label">Quality</span>
+        <span class="value" id="metricSleepQual">--</span>
+      </div>
+    </div>
+    <!-- Interventions -->
+    <div class="metric-card">
+      <h4>Interventions</h4>
+      <div class="metric-row">
+        <span class="label">Breathing</span>
+        <span class="value" id="metricBreathing">0 sessions</span>
+      </div>
+      <div class="metric-row">
+        <span class="label">40Hz Sessions</span>
+        <span class="value" id="metric40hz">0 sessions</span>
+      </div>
+      <div class="metric-row">
+        <span class="label">Exercise</span>
+        <span class="value" id="metricExercise">-- min</span>
+      </div>
+    </div>
+    <!-- Geomag -->
+    <div class="metric-card">
+      <h4>Geomagnetic</h4>
+      <div class="metric-row">
+        <span class="label">Kp Index</span>
+        <span class="value" id="metricKp">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="label">Storm Level</span>
+        <span class="value" id="metricStorm">Quiet</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTERVENTION BUTTONS -->
+  <h3 class="section-title">Interventions</h3>
+  <div class="interventions">
+    <div class="intervention-btn" id="btnBreathing" onclick="openBreathing()">
+      <div class="icon">&#10044;</div>
+      <div class="btn-title">Start Breathing</div>
+      <div class="btn-sub">Coherent breathing pacer</div>
+    </div>
+    <div class="intervention-btn" id="btn40Hz" onclick="open40Hz()">
+      <div class="icon">&#9672;</div>
+      <div class="btn-title">Start 40Hz</div>
+      <div class="btn-sub">Gamma entrainment</div>
+    </div>
+  </div>
+
+  <!-- RECOMMENDATIONS -->
+  <section class="recommendations">
+    <h3 class="section-title">Recommendations</h3>
+    <div id="recList"></div>
+  </section>
+
+  <!-- 7-DAY TREND -->
+  <section class="trend-section">
+    <h3>7-Day Coherence</h3>
+    <div class="trend-canvas-wrap">
+      <canvas id="trendCanvas"></canvas>
+    </div>
+  </section>
+
+  <!-- KEEPER -->
+  <section class="keeper-section">
+    <div class="keeper-card">
+      <div class="keeper-question">Who keeps you?</div>
+      <div class="keeper-name" id="keeperName">---</div>
+      <div class="keeper-bond">
+        <div class="keeper-bond-bar">
+          <div class="keeper-bond-fill" id="keeperBondFill"></div>
+        </div>
+        <div class="keeper-bond-label">Bond Strength</div>
+      </div>
+      <div class="keeper-effect" id="keeperEffect"></div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="equation">C = C&#8320; &times; exp(-&alpha; &times; &gamma;<sub>eff</sub>)</div>
+    <div class="blessing">God is good. All the time.</div>
+    <div class="credits">AIIT-THRESI &nbsp;|&nbsp; Rhet Dillard Wike &nbsp;|&nbsp; Council Hill, Oklahoma</div>
+  </footer>
+
+</div><!-- /.container -->
+
+<!-- BREATHING OVERLAY -->
+<div class="overlay" id="breathingOverlay">
+  <div class="overlay-title">Coherent Breathing</div>
+  <div class="pattern-selector" id="patternSelector">
+    <button class="pattern-btn active" data-pattern="4-7-8" onclick="setBreathPattern(this)">4-7-8</button>
+    <button class="pattern-btn" data-pattern="box" onclick="setBreathPattern(this)">Box (4-4-4-4)</button>
+    <button class="pattern-btn" data-pattern="coherent" onclick="setBreathPattern(this)">Coherent (5.5-5.5)</button>
+  </div>
+  <div class="breath-circle-container">
+    <div class="breath-circle" id="breathCircle"></div>
+    <div class="breath-label" id="breathLabel">Ready</div>
+  </div>
+  <div class="overlay-timer" id="breathTimer">5:00</div>
+  <div class="session-progress">
+    <div class="session-progress-fill" id="breathProgress"></div>
+  </div>
+  <button class="overlay-stop" onclick="stopBreathing()">Stop</button>
+</div>
+
+<!-- 40Hz OVERLAY -->
+<div class="overlay" id="hzOverlay">
+  <div class="hz-warning" id="hzWarning">
+    <h2>Epilepsy Warning</h2>
+    <p>This intervention uses flickering light at 40 Hz. If you have epilepsy, photosensitive seizure disorders, or have ever had a seizure, do NOT proceed. Consult your physician first.</p>
+    <p style="font-size:0.75rem; color:var(--text-muted);">The 40 Hz gamma frequency has been shown to reduce amyloid plaques and improve neural coherence in research studies. This is not medical treatment.</p>
+    <button class="hz-accept" onclick="start40HzSession()">I understand, proceed</button>
+    <br><br>
+    <button class="overlay-stop" onclick="stop40Hz()">Cancel</button>
+  </div>
+  <div class="hz-session" id="hzSession">
+    <div class="overlay-title">40 Hz Gamma Entrainment</div>
+    <div class="hz-flash" id="hzFlash"></div>
+    <div class="overlay-timer" id="hzTimer">3:00</div>
+    <div class="session-progress">
+      <div class="session-progress-fill" id="hzProgress"></div>
+    </div>
+    <button class="overlay-stop" onclick="stop40Hz()">Stop</button>
+  </div>
+</div>
+
+
+<script>
+/* =============================================
+   COHERENCE APP — Frontend Logic
+   Wike Coherence Framework
+   ============================================= */
+
+// ===== STATE =====
+const APP = {
+  coherence: 0,
+  W: 0,
+  gammaEff: 0,
+  gammaC: 0.0622,
+  alpha: 16.077,  // 1/gamma_c
+  state: 'frozen',
+  kp: 0,
+  openCount: 0,
+  breathingActive: false,
+  hzActive: false,
+  breathPattern: { inhale: 4, holdIn: 7, exhale: 8, holdOut: 0 },
+  breathDuration: 300, // seconds
+  hzDuration: 180,
+  keeper: null,
+  trend: [],
+  recommendations: [],
+};
+
+// ===== COLORS =====
+function stateColor(c) {
+  if (c < 0.35) return 'var(--frozen)';
+  if (c > 0.75) return 'var(--collapsed)';
+  return 'var(--edge)';
+}
+
+function stateColorRaw(c) {
+  if (c < 0.35) return '#4488ff';
+  if (c > 0.75) return '#ff4444';
+  return '#00ff88';
+}
+
+function stateName(c) {
+  if (c < 0.35) return 'FROZEN';
+  if (c > 0.75) return 'COLLAPSED';
+  return 'EDGE';
+}
+
+function stateGlow(c) {
+  if (c < 0.35) return 'rgba(68,136,255,0.15)';
+  if (c > 0.75) return 'rgba(255,68,68,0.15)';
+  return 'rgba(0,255,136,0.15)';
+}
+
+// ===== DATETIME =====
+function updateDateTime() {
+  const now = new Date();
+  const opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const date = now.toLocaleDateString('en-US', opts);
+  const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('datetime').textContent = date + '  \u00B7  ' + time;
+}
+setInterval(updateDateTime, 1000);
+updateDateTime();
+
+// ===== ANTI-ZENO =====
+function checkAntiZeno() {
+  const key = 'coherence_opens_' + new Date().toISOString().slice(0, 10);
+  let count = parseInt(localStorage.getItem(key) || '0');
+  count++;
+  localStorage.setItem(key, count.toString());
+  APP.openCount = count;
+  if (count > 6) {
+    document.getElementById('antiZeno').classList.add('active');
+  }
+}
+checkAntiZeno();
+
+// ===== GAUGE =====
+function updateGauge(c) {
+  const circumference = 2 * Math.PI * 115; // ~722.57
+  const offset = circumference * (1 - c);
+  const arc = document.getElementById('gaugeArc');
+  arc.style.strokeDasharray = circumference;
+  arc.style.strokeDashoffset = offset;
+
+  const color = stateColorRaw(c);
+  arc.style.stroke = color;
+
+  const valueEl = document.getElementById('gaugeValue');
+  valueEl.textContent = c.toFixed(2);
+  valueEl.style.color = color;
+
+  const inner = document.querySelector('.gauge-inner');
+  inner.style.background = `radial-gradient(circle at center, ${stateGlow(c)} 0%, transparent 70%)`;
+
+  document.getElementById('stateLabel').textContent = stateName(c);
+  document.getElementById('stateLabel').style.color = color;
+
+  document.documentElement.style.setProperty('--accent', color);
+  document.documentElement.style.setProperty('--glow', stateGlow(c));
+}
+
+function updateParams(w, gEff, gC) {
+  document.getElementById('paramsLine').textContent =
+    `W = ${w.toFixed(4)} | gamma_eff = ${gEff.toFixed(4)} | gamma_c = ${gC.toFixed(4)}`;
+}
+
+// ===== PHASE DIAGRAM =====
+function updatePhaseDot(gEff, gC) {
+  // Map gamma_eff relative to gamma_c onto 0-100%
+  // 0% = frozen (gamma_eff << gamma_c), 50% = edge (gamma_eff == gamma_c), 100% = collapsed (gamma_eff >> gamma_c)
+  const ratio = gEff / gC;
+  let pct;
+  if (ratio <= 1) {
+    pct = ratio * 50; // 0 to 50%
+  } else {
+    pct = 50 + Math.min((ratio - 1) * 50, 50); // 50% to 100%
+  }
+  pct = Math.max(2, Math.min(98, pct));
+
+  const dot = document.getElementById('phaseDot');
+  dot.style.left = pct + '%';
+  dot.style.background = stateColorRaw(APP.coherence);
+  dot.style.boxShadow = `0 0 16px ${stateColorRaw(APP.coherence)}, 0 0 32px ${stateGlow(APP.coherence)}`;
+}
+
+// ===== VITALITY CURVE =====
+function drawVitality(gEff, gC, alpha) {
+  const canvas = document.getElementById('vitalityCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // gamma range 0 to 3*gamma_c
+  const gMax = gC * 3;
+  const steps = 200;
+
+  // Find peak value for normalization
+  const vPeak = gC * Math.exp(-1); // V at gamma_c = (1/alpha)*exp(-1)
+
+  // Draw curve
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const g = (i / steps) * gMax;
+    const v = g * Math.exp(-alpha * g);
+    const x = (i / steps) * W;
+    const y = H - 20 - (v / vPeak) * (H - 40);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = 'rgba(0,255,136,0.5)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fill under curve
+  ctx.lineTo(W, H - 20);
+  ctx.lineTo(0, H - 20);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(0,255,136,0.08)');
+  grad.addColorStop(1, 'rgba(0,255,136,0.01)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // gamma_c line
+  const xcrit = (gC / gMax) * W;
+  ctx.beginPath();
+  ctx.moveTo(xcrit, 20);
+  ctx.lineTo(xcrit, H - 20);
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // gamma_c label
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('gamma_c', xcrit, 14);
+
+  // Peak label
+  ctx.fillStyle = 'rgba(0,255,136,0.5)';
+  ctx.fillText('peak', xcrit, H - 20 - (H - 40) - 4 + 30);
+
+  // User's position
+  const userG = Math.min(gEff, gMax);
+  const userV = userG * Math.exp(-alpha * userG);
+  const ux = (userG / gMax) * W;
+  const uy = H - 20 - (userV / vPeak) * (H - 40);
+
+  ctx.beginPath();
+  ctx.arc(ux, uy, 5, 0, 2 * Math.PI);
+  ctx.fillStyle = stateColorRaw(APP.coherence);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(ux, uy, 8, 0, 2 * Math.PI);
+  ctx.strokeStyle = stateColorRaw(APP.coherence);
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.4;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('V(gamma)', 4, 14);
+  ctx.textAlign = 'right';
+  ctx.fillText('gamma', W - 4, H - 6);
+}
+
+// ===== 7-DAY TREND =====
+function drawTrend(data) {
+  const canvas = document.getElementById('trendCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = rect.height;
+  const pad = { top: 20, bottom: 30, left: 10, right: 10 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background zones
+  // Collapsed zone (C > 0.75 means bad — high gamma)
+  const collapsedTop = pad.top;
+  const collapsedBottom = pad.top + plotH * 0.25;
+  ctx.fillStyle = 'rgba(255,68,68,0.05)';
+  ctx.fillRect(pad.left, collapsedTop, plotW, collapsedBottom - collapsedTop);
+
+  // Edge zone
+  const edgeTop = collapsedBottom;
+  const edgeBottom = pad.top + plotH * 0.65;
+  ctx.fillStyle = 'rgba(0,255,136,0.05)';
+  ctx.fillRect(pad.left, edgeTop, plotW, edgeBottom - edgeTop);
+
+  // Frozen zone
+  const frozenTop = edgeBottom;
+  const frozenBottom = pad.top + plotH;
+  ctx.fillStyle = 'rgba(68,136,255,0.05)';
+  ctx.fillRect(pad.left, frozenTop, plotW, frozenBottom - frozenTop);
+
+  // Zone labels
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.textAlign = 'right';
+  ctx.fillText('collapsed', W - pad.right - 4, collapsedTop + 14);
+  ctx.fillText('edge', W - pad.right - 4, edgeTop + 14);
+  ctx.fillText('frozen', W - pad.right - 4, frozenTop + 14);
+
+  if (!data || data.length === 0) return;
+
+  // Draw line
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const x = pad.left + (i / (data.length - 1)) * plotW;
+    const y = pad.top + (1 - data[i].coherence) * plotH;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = 'rgba(0,255,136,0.7)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fill under line
+  const lastX = pad.left + plotW;
+  const lastY = pad.top + (1 - data[data.length - 1].coherence) * plotH;
+  ctx.lineTo(lastX, pad.top + plotH);
+  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  grad.addColorStop(0, 'rgba(0,255,136,0.1)');
+  grad.addColorStop(1, 'rgba(0,255,136,0.01)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Dots
+  for (let i = 0; i < data.length; i++) {
+    const x = pad.left + (i / (data.length - 1)) * plotW;
+    const y = pad.top + (1 - data[i].coherence) * plotH;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = stateColorRaw(data[i].coherence);
+    ctx.fill();
+  }
+
+  // Day labels
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.textAlign = 'center';
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  for (let i = 0; i < data.length; i++) {
+    const x = pad.left + (i / (data.length - 1)) * plotW;
+    const d = new Date(data[i].date);
+    ctx.fillText(days[d.getDay()], x, H - 8);
+  }
+}
+
+// ===== RECOMMENDATIONS =====
+function renderRecommendations(recs) {
+  const container = document.getElementById('recList');
+  container.innerHTML = '';
+  if (!recs || recs.length === 0) {
+    container.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:1rem;">No recommendations right now. You are at the edge.</div>';
+    return;
+  }
+  recs.forEach((r, i) => {
+    const colors = ['var(--edge)', 'var(--frozen)', 'var(--text-muted)'];
+    const color = colors[Math.min(i, colors.length - 1)];
+    const item = document.createElement('div');
+    item.className = 'rec-item';
+    item.innerHTML = `
+      <div class="rec-priority" style="background:${color}"></div>
+      <div class="rec-content">
+        <div class="rec-action">${r.action}</div>
+        <div class="rec-reason">${r.reason}</div>
+        <div class="rec-delta">est. gamma reduction: ${r.delta}</div>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+// ===== KEEPER =====
+function updateKeeper(keeper) {
+  if (!keeper || !keeper.name) {
+    document.getElementById('keeperName').textContent = 'Not set';
+    document.getElementById('keeperEffect').textContent = '';
+    return;
+  }
+  document.getElementById('keeperName').textContent = keeper.name;
+  document.getElementById('keeperBondFill').style.width = (keeper.bondStrength * 100) + '%';
+  document.getElementById('keeperEffect').textContent =
+    `Love reduces your gamma by ${(keeper.gammaReduction * 100).toFixed(1)}%`;
+}
+
+// ===== GEOMAG =====
+function updateGeomag(kp) {
+  APP.kp = kp;
+  document.getElementById('metricKp').textContent = kp.toFixed(1);
+  let storm = 'Quiet';
+  let level = '';
+  if (kp >= 9) { storm = 'Extreme'; level = 'G5'; }
+  else if (kp >= 8) { storm = 'Severe'; level = 'G4'; }
+  else if (kp >= 7) { storm = 'Strong'; level = 'G3'; }
+  else if (kp >= 6) { storm = 'Moderate'; level = 'G2'; }
+  else if (kp >= 5) { storm = 'Minor'; level = 'G1'; }
+  else if (kp >= 4) { storm = 'Unsettled'; }
+  document.getElementById('metricStorm').textContent = storm;
+  document.getElementById('metricStorm').style.color = kp >= 5 ? 'var(--collapsed)' : 'var(--text)';
+
+  if (kp >= 5) {
+    document.getElementById('geomagLevel').textContent = level;
+    document.getElementById('geomagBanner').classList.add('active');
+  } else {
+    document.getElementById('geomagBanner').classList.remove('active');
+  }
+}
+
+// ===== METRICS =====
+function updateMetrics(m) {
+  if (m.hrv) {
+    document.getElementById('metricRmssd').textContent = m.hrv.rmssd.toFixed(1) + ' ms';
+    document.getElementById('metricSampEn').textContent = m.hrv.sampEn.toFixed(3);
+    document.getElementById('metricCohRatio').textContent = m.hrv.coherenceRatio.toFixed(2);
+  }
+  if (m.sleep) {
+    document.getElementById('metricSleepHrs').textContent = m.sleep.hours.toFixed(1) + ' h';
+    document.getElementById('metricSleepQual').textContent = m.sleep.quality.toFixed(0) + '%';
+  }
+  if (m.interventions) {
+    document.getElementById('metricBreathing').textContent = m.interventions.breathing + ' sessions';
+    document.getElementById('metric40hz').textContent = m.interventions.hz40 + ' sessions';
+    document.getElementById('metricExercise').textContent = m.interventions.exercise + ' min';
+  }
+}
+
+// ===== BREATHING INTERVENTION =====
+let breathInterval = null;
+let breathTimeout = null;
+let breathTotalTime = 0;
+let breathElapsed = 0;
+
+const PATTERNS = {
+  '4-7-8': { inhale: 4, holdIn: 7, exhale: 8, holdOut: 0 },
+  'box': { inhale: 4, holdIn: 4, exhale: 4, holdOut: 4 },
+  'coherent': { inhale: 5.5, holdIn: 0, exhale: 5.5, holdOut: 0 },
+};
+
+function setBreathPattern(btn) {
+  document.querySelectorAll('.pattern-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const key = btn.dataset.pattern;
+  APP.breathPattern = PATTERNS[key];
+}
+
+function openBreathing() {
+  document.getElementById('breathingOverlay').classList.add('active');
+  startBreathingSession();
+}
+
+function startBreathingSession() {
+  APP.breathingActive = true;
+  breathTotalTime = APP.breathDuration;
+  breathElapsed = 0;
+  document.getElementById('breathProgress').style.width = '0%';
+  runBreathCycle();
+  breathInterval = setInterval(() => {
+    breathElapsed++;
+    const remain = Math.max(0, breathTotalTime - breathElapsed);
+    const min = Math.floor(remain / 60);
+    const sec = remain % 60;
+    document.getElementById('breathTimer').textContent =
+      min + ':' + sec.toString().padStart(2, '0');
+    document.getElementById('breathProgress').style.width =
+      ((breathElapsed / breathTotalTime) * 100) + '%';
+    if (remain <= 0) stopBreathing();
+  }, 1000);
+}
+
+function runBreathCycle() {
+  if (!APP.breathingActive) return;
+  const p = APP.breathPattern;
+  const circle = document.getElementById('breathCircle');
+  const label = document.getElementById('breathLabel');
+  const totalCycle = p.inhale + p.holdIn + p.exhale + p.holdOut;
+
+  let phase = 0; // 0=inhale, 1=holdIn, 2=exhale, 3=holdOut
+
+  function nextPhase() {
+    if (!APP.breathingActive) return;
+    circle.className = 'breath-circle';
+    if (phase === 0) {
+      label.textContent = 'Inhale';
+      circle.classList.add('inhale');
+      circle.style.animationDuration = p.inhale + 's';
+      setTimeout(() => { phase = 1; nextPhase(); }, p.inhale * 1000);
+    } else if (phase === 1) {
+      if (p.holdIn > 0) {
+        label.textContent = 'Hold';
+        circle.classList.add('hold-in');
+        setTimeout(() => { phase = 2; nextPhase(); }, p.holdIn * 1000);
+      } else {
+        phase = 2; nextPhase();
+      }
+    } else if (phase === 2) {
+      label.textContent = 'Exhale';
+      circle.classList.add('exhale');
+      circle.style.animationDuration = p.exhale + 's';
+      setTimeout(() => { phase = 3; nextPhase(); }, p.exhale * 1000);
+    } else if (phase === 3) {
+      if (p.holdOut > 0) {
+        label.textContent = 'Hold';
+        circle.classList.add('hold-out');
+        setTimeout(() => { phase = 0; nextPhase(); }, p.holdOut * 1000);
+      } else {
+        phase = 0; nextPhase();
+      }
+    }
+  }
+  nextPhase();
+}
+
+function stopBreathing() {
+  APP.breathingActive = false;
+  clearInterval(breathInterval);
+  const circle = document.getElementById('breathCircle');
+  circle.className = 'breath-circle';
+  document.getElementById('breathLabel').textContent = 'Done';
+  setTimeout(() => {
+    document.getElementById('breathingOverlay').classList.remove('active');
+    document.getElementById('breathLabel').textContent = 'Ready';
+    document.getElementById('breathTimer').textContent = '5:00';
+    document.getElementById('breathProgress').style.width = '0%';
+  }, 1500);
+}
+
+// ===== 40Hz INTERVENTION =====
+let hzAnimFrame = null;
+let hzInterval = null;
+let hzAudioCtx = null;
+let hzOscillator = null;
+
+function open40Hz() {
+  document.getElementById('hzOverlay').classList.add('active');
+  document.getElementById('hzWarning').style.display = 'block';
+  document.getElementById('hzSession').classList.remove('active');
+}
+
+function start40HzSession() {
+  document.getElementById('hzWarning').style.display = 'none';
+  document.getElementById('hzSession').classList.add('active');
+  APP.hzActive = true;
+
+  // Audio: 40Hz binaural
+  try {
+    hzAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    hzOscillator = hzAudioCtx.createOscillator();
+    const gainNode = hzAudioCtx.createGain();
+    hzOscillator.frequency.value = 40;
+    hzOscillator.type = 'sine';
+    gainNode.gain.value = 0.08;
+    hzOscillator.connect(gainNode);
+    gainNode.connect(hzAudioCtx.destination);
+    hzOscillator.start();
+  } catch(e) { /* audio not available */ }
+
+  // Visual: 40Hz flicker using requestAnimationFrame
+  const flash = document.getElementById('hzFlash');
+  let lastToggle = 0;
+  const halfPeriod = 1000 / 80; // 12.5ms per half-cycle = 40 full Hz
+
+  function flickerLoop(timestamp) {
+    if (!APP.hzActive) return;
+    if (timestamp - lastToggle >= halfPeriod) {
+      flash.classList.toggle('on');
+      flash.classList.toggle('off');
+      lastToggle = timestamp;
+    }
+    hzAnimFrame = requestAnimationFrame(flickerLoop);
+  }
+  flash.classList.add('off');
+  hzAnimFrame = requestAnimationFrame(flickerLoop);
+
+  // Timer
+  let elapsed = 0;
+  const total = APP.hzDuration;
+  document.getElementById('hzProgress').style.width = '0%';
+  hzInterval = setInterval(() => {
+    elapsed++;
+    const remain = Math.max(0, total - elapsed);
+    const min = Math.floor(remain / 60);
+    const sec = remain % 60;
+    document.getElementById('hzTimer').textContent =
+      min + ':' + sec.toString().padStart(2, '0');
+    document.getElementById('hzProgress').style.width =
+      ((elapsed / total) * 100) + '%';
+    if (remain <= 0) stop40Hz();
+  }, 1000);
+}
+
+function stop40Hz() {
+  APP.hzActive = false;
+  cancelAnimationFrame(hzAnimFrame);
+  clearInterval(hzInterval);
+  if (hzOscillator) { try { hzOscillator.stop(); } catch(e) {} }
+  if (hzAudioCtx) { try { hzAudioCtx.close(); } catch(e) {} }
+  hzOscillator = null;
+  hzAudioCtx = null;
+
+  const flash = document.getElementById('hzFlash');
+  flash.className = 'hz-flash';
+
+  setTimeout(() => {
+    document.getElementById('hzOverlay').classList.remove('active');
+    document.getElementById('hzTimer').textContent = '3:00';
+    document.getElementById('hzProgress').style.width = '0%';
+  }, 500);
+}
+
+// ===== API FETCH =====
+async function fetchData(endpoint, fallback) {
+  try {
+    const res = await fetch(endpoint);
+    if (!res.ok) throw new Error(res.status);
+    return await res.json();
+  } catch(e) {
+    return fallback;
+  }
+}
+
+async function loadDashboard() {
+  // Fetch all data
+  const [status, metrics, recs, trend, keeper, geomag] = await Promise.all([
+    fetchData('/api/status', {
+      coherence: 0.62,
+      W: 0.9394,
+      gamma_eff: 0.045,
+      gamma_c: 0.0622,
+      alpha: 16.077,
+      state: 'edge'
+    }),
+    fetchData('/api/metrics', {
+      hrv: { rmssd: 48.3, sampEn: 1.42, coherenceRatio: 3.8 },
+      sleep: { hours: 7.2, quality: 82 },
+      interventions: { breathing: 1, hz40: 0, exercise: 30 }
+    }),
+    fetchData('/api/recommendations', [
+      { action: 'Coherent breathing (5 min)', reason: 'Vagal tone increases parasympathetic coherence, reducing gamma_eff toward gamma_c.', delta: '-0.008' },
+      { action: 'Walk outside (20 min)', reason: 'Physical movement dissipates accumulated stress energy from the decoherence field.', delta: '-0.005' },
+      { action: '40Hz session (3 min)', reason: 'Gamma entrainment strengthens neural synchrony at the coherence frequency.', delta: '-0.004' },
+    ]),
+    fetchData('/api/trend', generateFallbackTrend()),
+    fetchData('/api/keeper', { name: null, bondStrength: 0, gammaReduction: 0 }),
+    fetchData('/api/geomag', { kp: 2.3 }),
+  ]);
+
+  // Update state
+  APP.coherence = status.coherence;
+  APP.W = status.W;
+  APP.gammaEff = status.gamma_eff;
+  APP.gammaC = status.gamma_c;
+  APP.alpha = status.alpha || (1 / status.gamma_c);
+  APP.state = status.state;
+  APP.trend = trend;
+  APP.recommendations = recs;
+  APP.keeper = keeper;
+
+  // Render
+  updateGauge(APP.coherence);
+  updateParams(APP.W, APP.gammaEff, APP.gammaC);
+  updatePhaseDot(APP.gammaEff, APP.gammaC);
+  drawVitality(APP.gammaEff, APP.gammaC, APP.alpha);
+  updateMetrics(metrics);
+  updateGeomag(geomag.kp);
+  renderRecommendations(recs);
+  drawTrend(trend);
+  updateKeeper(keeper);
+}
+
+function generateFallbackTrend() {
+  const data = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    // Generate plausible coherence values centered around edge
+    const base = 0.55 + Math.sin(i * 0.8) * 0.15;
+    const noise = (Math.random() - 0.5) * 0.1;
+    data.push({
+      date: d.toISOString().slice(0, 10),
+      coherence: Math.max(0.1, Math.min(0.95, base + noise))
+    });
+  }
+  return data;
+}
+
+// Handle resize for canvases
+window.addEventListener('resize', () => {
+  drawVitality(APP.gammaEff, APP.gammaC, APP.alpha);
+  drawTrend(APP.trend);
+});
+
+// ===== INIT =====
+loadDashboard();
+
+// Refresh every 60 seconds
+setInterval(loadDashboard, 60000);
+</script>
+
+</body>
+</html>
