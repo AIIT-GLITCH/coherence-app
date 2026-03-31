@@ -122,6 +122,18 @@ BREATHING_PATTERNS = {
             "Bernardi proved it. The physics was always in the prayer."
         ),
     },
+    "4-7-8": {
+        "name": "4-7-8 Breathing",
+        "inhale_sec": 4.0,
+        "exhale_sec": 8.0,
+        "hold_in_sec": 7.0,
+        "hold_out_sec": 0.0,
+        "rate_hz": round(1.0 / 19.0, 4),
+        "description": (
+            "Andrew Weil protocol. 4s inhale, 7s hold, 8s exhale. "
+            "Extended exhale and hold maximize parasympathetic activation."
+        ),
+    },
 }
 
 # Gamma 40 Hz modes
@@ -966,6 +978,30 @@ def require_json(f):
 # ---------------------------------------------------------------------------
 # ENDPOINTS
 # ---------------------------------------------------------------------------
+
+# ---- POST /api/check (Anti-Zeno server-side tracking, Paper 50) ----
+
+@app.route("/api/check", methods=["POST"])
+def record_check():
+    """
+    Record that the user opened the app. Returns daily count and limit.
+    Paper 50: frequent measurement accelerates decoherence (anti-Zeno).
+    The 6-check/day limit is a physics constraint, not a UX nudge.
+    """
+    try:
+        user_id = 1  # single-user for now
+        _record_app_check(user_id, "/api/check")
+        count = _get_check_count_today(user_id)
+        return json_response({
+            "count": count,
+            "limit": ANTI_ZENO_MAX_CHECKS_PER_DAY,
+            "at_limit": count >= ANTI_ZENO_MAX_CHECKS_PER_DAY,
+            "message": ANTI_ZENO_MESSAGE if count >= ANTI_ZENO_MAX_CHECKS_PER_DAY else None,
+        })
+    except Exception as exc:
+        log.exception("Error recording check")
+        return error_response(f"Internal error: {exc}", 500)
+
 
 # ---- POST /api/reading ----
 

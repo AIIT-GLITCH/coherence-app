@@ -1,3 +1,25 @@
-key.pem
+# === Certificates & Keys (NEVER commit) ===
+*.pem
+*.key
+*.crt
+*.p12
+
+# === Python ===
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# === Database ===
+*.db
+*.sqlite
+*.sqlite3
+
+# === Environment ===
+.env
+
+# === OS ===
+.DS_Store
+
+# === IDE ===
+.vscode/
+.idea/

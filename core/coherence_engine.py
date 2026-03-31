@@ -84,6 +84,9 @@ LANDAUER_COST: float = K_B * T_BODY * math.log(2)  # ~ 2.97e-21 J
 # Each ACE multiplies risk by exp(beta). beta ~ 0.38-0.59, mean 0.416.
 ACE_BETA: float = 0.416
 
+# ACE stretched exponent (sub-diffusive, Paper 24)
+ACE_NU: float = 0.82
+
 # Baseline thermal decoherence at 310K.
 # Always present — the floor of gamma_eff for any living system.
 # Set to 10% of gamma_c: the irreducible thermal noise at body temp.
@@ -300,11 +303,14 @@ class CoherenceEngine:
         gamma_inflammatory = reading.inflammation_markers * GAMMA_C * 1.2
 
         # ACE accumulation (Paper 24).
-        # Each ACE is a collapse operator: C_n = C_0 * exp(-beta * n).
-        # beta = 0.416 from Felitti 1998 reanalysis.
+        # C_n = C_0 * exp(-(beta * n)^nu) — stretched exponential.
+        # beta = 0.416 from Felitti 1998 reanalysis, nu = 0.82 (sub-diffusive).
         # This is Anderson localization of the developing neural network.
-        # The gamma contribution is ace_score * beta * gamma_c.
-        gamma_ace = self.profile.ace_score * ACE_BETA * GAMMA_C
+        ace_clamped = min(self.profile.ace_score, 10.0)
+        if ace_clamped > 0:
+            gamma_ace = 0.005 * (1.0 - math.exp(-((ACE_BETA * ace_clamped) ** ACE_NU)))
+        else:
+            gamma_ace = 0.0
 
         # Sleep deficit.
         # Sleep is when the glymphatic system clears metabolic waste

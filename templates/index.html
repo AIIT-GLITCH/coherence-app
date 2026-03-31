@@ -961,7 +961,7 @@ footer .credits {
   <div class="pattern-selector" id="patternSelector">
     <button class="pattern-btn active" data-pattern="4-7-8" onclick="setBreathPattern(this)">4-7-8</button>
     <button class="pattern-btn" data-pattern="box" onclick="setBreathPattern(this)">Box (4-4-4-4)</button>
-    <button class="pattern-btn" data-pattern="coherent" onclick="setBreathPattern(this)">Coherent (5.5-5.5)</button>
+    <button class="pattern-btn" data-pattern="resonance" onclick="setBreathPattern(this)">Resonance (5-5)</button>
   </div>
   <div class="breath-circle-container">
     <div class="breath-circle" id="breathCircle"></div>
@@ -985,7 +985,7 @@ footer .credits {
     <button class="overlay-stop" onclick="stop40Hz()">Cancel</button>
   </div>
   <div class="hz-session" id="hzSession">
-    <div class="overlay-title">40 Hz Gamma Entrainment</div>
+    <div class="overlay-title">40 Hz Gamma Entrainment (Auditory Tone + Visual)</div>
     <div class="hz-flash" id="hzFlash"></div>
     <div class="overlay-timer" id="hzTimer">3:00</div>
     <div class="session-progress">
@@ -1024,26 +1024,26 @@ const APP = {
 
 // ===== COLORS =====
 function stateColor(c) {
-  if (c < 0.35) return 'var(--frozen)';
-  if (c > 0.75) return 'var(--collapsed)';
+  if (c > 0.607) return 'var(--frozen)';    // gamma_eff < 0.5 * gamma_c
+  if (c < 0.223) return 'var(--collapsed)'; // gamma_eff > 1.5 * gamma_c
   return 'var(--edge)';
 }
 
 function stateColorRaw(c) {
-  if (c < 0.35) return '#4488ff';
-  if (c > 0.75) return '#ff4444';
+  if (c > 0.607) return '#4488ff';    // FROZEN
+  if (c < 0.223) return '#ff4444';    // COLLAPSED
   return '#00ff88';
 }
 
 function stateName(c) {
-  if (c < 0.35) return 'FROZEN';
-  if (c > 0.75) return 'COLLAPSED';
+  if (c > 0.607) return 'FROZEN';     // gamma_eff < 0.5 * gamma_c -> low decoherence
+  if (c < 0.223) return 'COLLAPSED';  // gamma_eff > 1.5 * gamma_c -> high decoherence
   return 'EDGE';
 }
 
 function stateGlow(c) {
-  if (c < 0.35) return 'rgba(68,136,255,0.15)';
-  if (c > 0.75) return 'rgba(255,68,68,0.15)';
+  if (c > 0.607) return 'rgba(68,136,255,0.15)';   // FROZEN
+  if (c < 0.223) return 'rgba(255,68,68,0.15)';    // COLLAPSED
   return 'rgba(0,255,136,0.15)';
 }
 
@@ -1058,8 +1058,27 @@ function updateDateTime() {
 setInterval(updateDateTime, 1000);
 updateDateTime();
 
-// ===== ANTI-ZENO =====
-function checkAntiZeno() {
+// ===== ANTI-ZENO (Paper 50: server-side with localStorage fallback) =====
+async function checkAntiZeno() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch('/api/check', { method: 'POST', signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      APP.openCount = data.count;
+      if (data.at_limit) {
+        document.getElementById('antiZeno').classList.add('active');
+      }
+      // Sync localStorage as backup
+      const key = 'coherence_opens_' + new Date().toISOString().slice(0, 10);
+      localStorage.setItem(key, data.count.toString());
+      return;
+    }
+  } catch(e) { /* server unreachable, fall back to localStorage */ }
+
+  // localStorage fallback
   const key = 'coherence_opens_' + new Date().toISOString().slice(0, 10);
   let count = parseInt(localStorage.getItem(key) || '0');
   count++;
@@ -1393,7 +1412,7 @@ let breathElapsed = 0;
 const PATTERNS = {
   '4-7-8': { inhale: 4, holdIn: 7, exhale: 8, holdOut: 0 },
   'box': { inhale: 4, holdIn: 4, exhale: 4, holdOut: 4 },
-  'coherent': { inhale: 5.5, holdIn: 0, exhale: 5.5, holdOut: 0 },
+  'resonance': { inhale: 5, holdIn: 0, exhale: 5, holdOut: 0 },
 };
 
 function setBreathPattern(btn) {
@@ -1501,7 +1520,7 @@ function start40HzSession() {
   document.getElementById('hzSession').classList.add('active');
   APP.hzActive = true;
 
-  // Audio: 40Hz binaural
+  // Audio: 40Hz direct auditory tone (not binaural — works on phone speakers without headphones)
   try {
     hzAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     hzOscillator = hzAudioCtx.createOscillator();
@@ -1514,10 +1533,38 @@ function start40HzSession() {
     hzOscillator.start();
   } catch(e) { /* audio not available */ }
 
-  // Visual: 40Hz flicker using requestAnimationFrame
+  // Visual: approximate 40Hz flicker using requestAnimationFrame
+  // NOTE (ISSUE-010): requestAnimationFrame fires at the display's native refresh rate.
+  // On a 60Hz display, the effective flicker is ~30Hz (not 40Hz).
+  // On a 120Hz display, it would be ~60Hz. Neither is exactly 40Hz.
+  // True 40Hz visual entrainment requires a display with refresh rate divisible by 40 (e.g., 80Hz, 120Hz).
+  // The audio tone above IS exactly 40Hz regardless of display. Visual is labeled "approximate."
   const flash = document.getElementById('hzFlash');
   let lastToggle = 0;
-  const halfPeriod = 1000 / 80; // 12.5ms per half-cycle = 40 full Hz
+  const halfPeriod = 1000 / 80; // 12.5ms per half-cycle = 40 full Hz (target)
+
+  // Detect display refresh rate and warn if 40Hz is not achievable
+  let displayHz = 60; // default assumption
+  let rateFrames = [];
+  function measureRate(ts) {
+    rateFrames.push(ts);
+    if (rateFrames.length < 12) { requestAnimationFrame(measureRate); return; }
+    const avg = (rateFrames[rateFrames.length - 1] - rateFrames[0]) / (rateFrames.length - 1);
+    displayHz = Math.round(1000 / avg);
+    rateFrames = [];
+    const canDo40 = (displayHz >= 80 && displayHz % 40 === 0);
+    if (!canDo40) {
+      console.warn('Display is ' + displayHz + 'Hz — exact 40Hz visual entrainment unavailable. Effective flicker: ~' + Math.round(displayHz / 2) + 'Hz. Audio provides exact 40Hz. Consider audio-only mode.');
+      // Show visual caveat to user
+      const titleEl = document.querySelector('#hzSession .overlay-title');
+      if (titleEl) {
+        titleEl.textContent = '40 Hz Gamma Entrainment — Visual: ~' + Math.round(displayHz / 2) + 'Hz (approximate), Audio: exact 40Hz';
+      }
+    }
+    // Start the actual flicker loop after measurement
+    flash.classList.add('off');
+    hzAnimFrame = requestAnimationFrame(flickerLoop);
+  }
 
   function flickerLoop(timestamp) {
     if (!APP.hzActive) return;
@@ -1528,8 +1575,7 @@ function start40HzSession() {
     }
     hzAnimFrame = requestAnimationFrame(flickerLoop);
   }
-  flash.classList.add('off');
-  hzAnimFrame = requestAnimationFrame(flickerLoop);
+  requestAnimationFrame(measureRate);
 
   // Timer
   let elapsed = 0;
@@ -1567,42 +1613,39 @@ function stop40Hz() {
   }, 500);
 }
 
-// ===== API FETCH =====
-async function fetchData(endpoint, fallback) {
+// ===== API FETCH (with 5s timeout — ISSUE-008/009) =====
+async function fetchData(endpoint, method = 'GET') {
   try {
-    const res = await fetch(endpoint);
-    if (!res.ok) throw new Error(res.status);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(endpoint, { method, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
     return await res.json();
   } catch(e) {
-    return fallback;
+    return null;
   }
 }
 
 async function loadDashboard() {
-  // Fetch all data
+  // Fetch all data — no fake fallbacks; null means "no data"
   const [status, metrics, recs, trend, keeper, geomag] = await Promise.all([
-    fetchData('/api/status', {
-      coherence: 0.62,
-      W: 0.9394,
-      gamma_eff: 0.045,
-      gamma_c: 0.0622,
-      alpha: 16.077,
-      state: 'edge'
-    }),
-    fetchData('/api/metrics', {
-      hrv: { rmssd: 48.3, sampEn: 1.42, coherenceRatio: 3.8 },
-      sleep: { hours: 7.2, quality: 82 },
-      interventions: { breathing: 1, hz40: 0, exercise: 30 }
-    }),
-    fetchData('/api/recommendations', [
-      { action: 'Coherent breathing (5 min)', reason: 'Vagal tone increases parasympathetic coherence, reducing gamma_eff toward gamma_c.', delta: '-0.008' },
-      { action: 'Walk outside (20 min)', reason: 'Physical movement dissipates accumulated stress energy from the decoherence field.', delta: '-0.005' },
-      { action: '40Hz session (3 min)', reason: 'Gamma entrainment strengthens neural synchrony at the coherence frequency.', delta: '-0.004' },
-    ]),
-    fetchData('/api/trend', generateFallbackTrend()),
-    fetchData('/api/keeper', { name: null, bondStrength: 0, gammaReduction: 0 }),
-    fetchData('/api/geomag', { kp: 2.3 }),
+    fetchData('/api/status'),
+    fetchData('/api/metrics'),
+    fetchData('/api/recommendations'),
+    fetchData('/api/trend'),
+    fetchData('/api/keeper'),
+    fetchData('/api/geomag'),
   ]);
+
+  // If core status is unavailable, show NO DATA instead of fake green EDGE
+  if (!status) {
+    document.getElementById('gaugeValue').textContent = '--';
+    document.getElementById('stateLabel').textContent = 'NO DATA';
+    document.getElementById('stateLabel').style.color = 'var(--text-muted)';
+    document.getElementById('paramsLine').textContent = 'Server unreachable';
+    return;
+  }
 
   // Update state
   APP.coherence = status.coherence;
@@ -1611,8 +1654,8 @@ async function loadDashboard() {
   APP.gammaC = status.gamma_c;
   APP.alpha = status.alpha || (1 / status.gamma_c);
   APP.state = status.state;
-  APP.trend = trend;
-  APP.recommendations = recs;
+  APP.trend = trend || [];
+  APP.recommendations = recs || [];
   APP.keeper = keeper;
 
   // Render
@@ -1620,11 +1663,11 @@ async function loadDashboard() {
   updateParams(APP.W, APP.gammaEff, APP.gammaC);
   updatePhaseDot(APP.gammaEff, APP.gammaC);
   drawVitality(APP.gammaEff, APP.gammaC, APP.alpha);
-  updateMetrics(metrics);
-  updateGeomag(geomag.kp);
-  renderRecommendations(recs);
-  drawTrend(trend);
-  updateKeeper(keeper);
+  if (metrics) updateMetrics(metrics);
+  if (geomag && geomag.kp != null) updateGeomag(geomag.kp);
+  renderRecommendations(APP.recommendations);
+  drawTrend(APP.trend);
+  if (keeper) updateKeeper(keeper);
 }
 
 function generateFallbackTrend() {
